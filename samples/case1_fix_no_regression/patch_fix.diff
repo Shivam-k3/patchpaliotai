@@ -1,0 +1,9 @@
+diff --git a/mathlib.py b/mathlib.py
+--- a/mathlib.py
++++ b/mathlib.py
+@@ -1,4 +1,4 @@
+ def divide(a, b):
+     if b == 0:
+         raise ValueError("division by zero")
+-    return a / b
++    return a / b

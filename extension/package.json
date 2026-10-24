@@ -1,0 +1,44 @@
+{
+  "name": "patchpilot-ai",
+  "displayName": "PatchPilot AI",
+  "description": "Regression-aware patch verification with PatchPilot AI backend",
+  "version": "0.1.0",
+  "publisher": "patchpilot",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "patchpilot.check", "title": "PatchPilot: Check Backend" },
+      { "command": "patchpilot.samples", "title": "PatchPilot: List Samples" },
+      { "command": "patchpilot.analyze", "title": "PatchPilot: Analyze Bug" },
+      { "command": "patchpilot.verify", "title": "PatchPilot: Verify Patch" },
+      { "command": "patchpilot.panel", "title": "PatchPilot: Open Panel" }
+    ],
+    "configuration": {
+      "title": "PatchPilot AI",
+      "properties": {
+        "patchpilot.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Base URL of PatchPilot backend"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.0.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}

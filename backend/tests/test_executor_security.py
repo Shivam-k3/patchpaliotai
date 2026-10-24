@@ -5,11 +5,18 @@ from pathlib import Path
 import tempfile
 
 def test_docker_unavailable_returns_runner_error():
-    with patch('app.executor._docker_available', return_value=False):
-        d = Path(tempfile.mkdtemp())
-        r = executor.run_tests(d)
-        assert r.runner_error is True
-        assert len(r.tests) == 0
+    from app import config
+    old = getattr(config.settings, 'execution_mode', 'local')
+    try:
+        config.settings.execution_mode = 'docker'
+        with patch('app.executor._docker_available', return_value=False):
+            d = Path(tempfile.mkdtemp())
+            r = executor.run_tests(d)
+            assert r.runner_error is True
+            assert len(r.tests) == 0
+    finally:
+        config.settings.execution_mode = old
+
 
 def test_run_tests_timeout():
     with patch('app.executor._docker_available', return_value=True):
