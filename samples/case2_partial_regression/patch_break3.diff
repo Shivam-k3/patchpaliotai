@@ -1,0 +1,8 @@
+﻿diff --git a/mathlib.py b/mathlib.py
+index e69de29..e69de29 100644
+--- a/mathlib.py
++++ b/mathlib.py
+@@ -1,2 +1,2 @@
+ def is_even(n):
+-    return n % 2 == 0
++    return n % 2 == 1

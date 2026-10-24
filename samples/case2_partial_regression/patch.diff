@@ -1,0 +1,6 @@
+﻿--- a/mathlib.py
++++ b/mathlib.py
+@@ -1,2 +1,2 @@
+ def is_even(n):
+-    return n % 2 == 1  # breaks passing tests
++    return n % 2 == 0  # fix
