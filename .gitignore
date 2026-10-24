@@ -61,6 +61,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Keep frontend source utilities trackable (the generic lib/ rule above is for Python envs)
+!frontend/src/lib/
+!frontend/src/lib/**
+
 # Local secrets
 *.pem
 *.key
