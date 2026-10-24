@@ -7,16 +7,29 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "patchpilot.check", "title": "PatchPilot: Check Backend" },
-      { "command": "patchpilot.samples", "title": "PatchPilot: List Samples" },
-      { "command": "patchpilot.analyze", "title": "PatchPilot: Analyze Bug" },
-      { "command": "patchpilot.verify", "title": "PatchPilot: Verify Patch" },
-      { "command": "patchpilot.panel", "title": "PatchPilot: Open Panel" }
+      {
+        "command": "patchpilot.check",
+        "title": "PatchPilot: Check Backend"
+      },
+      {
+        "command": "patchpilot.samples",
+        "title": "PatchPilot: List Samples"
+      },
+      {
+        "command": "patchpilot.analyze",
+        "title": "PatchPilot: Analyze Bug"
+      },
+      {
+        "command": "patchpilot.verify",
+        "title": "PatchPilot: Verify Patch"
+      }
     ],
     "configuration": {
       "title": "PatchPilot AI",
@@ -33,12 +46,18 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package"
+    "package": "vsce package",
+    "test": "npm run compile && node ./out/test/runTest.js"
   },
   "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.85.0",
-    "typescript": "^5.0.0",
-    "@vscode/vsce": "^2.22.0"
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^2.22.0",
+    "glob": "^13.0.6",
+    "mocha": "^12.0.3",
+    "typescript": "^5.0.0"
   }
 }
