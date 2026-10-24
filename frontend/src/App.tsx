@@ -5,7 +5,7 @@
 //   POST /api/verify   { sample_name, patch_text } -> verification result
 import DiffView from "./components/DiffView";
 import ResultPanel from "./components/ResultPanel";
-import { analyzeBug, DEFAULT_TEST_COMMAND, fetchHealth, fetchReady, fetchSamples, verifyPatch } from "./api";
+import { analyzeBug, DEFAULT_TEST_COMMAND, fetchHealth, fetchProjects, fetchReady, fetchSamples, verifyPatch, type ProjectInfo } from "./api";
 import { toText } from "./lib/text";
 import type { AnalyzeResponse, VerificationResult } from "./types";
 
@@ -13,7 +13,9 @@ const MAX_BUG_LENGTH = 10000;
 
 export default function App() {
   const [samples, setSamples] = useState<string[]>([]);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [sample, setSample] = useState("");
+  const [selection, setSelection] = useState("");
   const [bug, setBug] = useState("");
   const [patch, setPatch] = useState("");
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
@@ -30,6 +32,8 @@ export default function App() {
   const [history, setHistory] = useState<Array<{ kind: string; sample: string; summary: string; at: string }>>([]);
 
   const activeSample = sample || samples[0] || "";
+  const activeProject = projects.find((project) => selection === `project:${project.id}`);
+  const selectedSample = selection.startsWith("sample:") ? selection.slice("sample:".length) : activeProject ? "" : activeSample;
   const trimmedBug = bug.trim();
   const canAnalyze = trimmedBug.length > 0 && trimmedBug.length <= MAX_BUG_LENGTH;
   const canVerify = patch.trim().length > 0;
@@ -57,6 +61,9 @@ export default function App() {
       const list = await fetchSamples();
       setSamples(list);
       setSample((prev) => prev || list[0] || "");
+      const registeredProjects = await fetchProjects();
+      setProjects(registeredProjects);
+      setSelection((prev) => prev || (list[0] ? `sample:${list[0]}` : registeredProjects[0] ? `project:${registeredProjects[0].id}` : ""));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load the sample list.");
     } finally {
@@ -80,16 +87,16 @@ export default function App() {
   };
 
   const handleAnalyze = async () => {
-    if (analyzing || !canAnalyze || !activeSample) return;
+    if (analyzing || !canAnalyze || (!selectedSample && !activeProject)) return;
     setAnalyzing(true);
     setError(null);
     try {
-      const data = await analyzeBug(trimmedBug, activeSample);
+      const data = await analyzeBug(trimmedBug, selectedSample || undefined, activeProject?.id);
       setAnalysis(data);
       setPatch(data.proposed_unified_diff ?? "");
       setResult(null);
       setHistory((prev) => [
-        { kind: "Analyze", sample: activeSample, summary: toText(data.bug_summary) || "Patch proposed", at: new Date().toLocaleTimeString() },
+        { kind: "Analyze", sample: activeProject?.label || selectedSample, summary: toText(data.bug_summary) || "Patch proposed", at: new Date().toLocaleTimeString() },
         ...prev,
       ].slice(0, 10));
     } catch (e) {
@@ -100,14 +107,14 @@ export default function App() {
   };
 
   const handleVerify = async () => {
-    if (verifying || !canVerify || !activeSample) return;
+    if (verifying || !canVerify || (!selectedSample && !activeProject)) return;
     setVerifying(true);
     setError(null);
     try {
-      const data = await verifyPatch(activeSample, patch);
+      const data = await verifyPatch(selectedSample, patch, undefined, activeProject?.id);
       setResult(data);
       setHistory((prev) => [
-        { kind: "Verify", sample: activeSample, summary: data.classification, at: new Date().toLocaleTimeString() },
+        { kind: "Verify", sample: activeProject?.label || selectedSample, summary: data.classification, at: new Date().toLocaleTimeString() },
         ...prev,
       ].slice(0, 10));
     } catch (e) {
@@ -115,7 +122,7 @@ export default function App() {
       const message = e instanceof Error ? e.message : "The verification failed unexpectedly.";
       setError(message);
       setHistory((prev) => [
-        { kind: "Verify", sample: activeSample, summary: `Failed: ${message}`, at: new Date().toLocaleTimeString() },
+        { kind: "Verify", sample: activeProject?.label || selectedSample, summary: `Failed: ${message}`, at: new Date().toLocaleTimeString() },
         ...prev,
       ].slice(0, 10));
     } finally {
@@ -124,7 +131,8 @@ export default function App() {
   };
 
   const handleSampleChange = (value: string) => {
-    setSample(value);
+    setSelection(value);
+    setSample(value.startsWith("sample:") ? value.slice("sample:".length) : "");
     setAnalysis(null);
     setPatch("");
     setResult(null);
@@ -199,17 +207,20 @@ export default function App() {
             </label>
             <select
               id="sample"
-              value={activeSample}
+              value={selection || (activeSample ? `sample:${activeSample}` : "")}
               onChange={(e) => handleSampleChange(e.target.value)}
               disabled={loadingSamples}
               className="mt-1 w-full rounded border border-gray-300 bg-white p-2"
             >
               {loadingSamples ? <option value="">Loading samples…</option> : null}
               {samples.map((s) => (
-                <option key={s} value={s}>
+                <option key={s} value={`sample:${s}`}>
                   {s}
                 </option>
               ))}
+              {projects.length ? <optgroup label="Registered projects">
+                {projects.map((project) => <option key={project.id} value={`project:${project.id}`}>{project.label}</option>)}
+              </optgroup> : null}
             </select>
             {samples.length === 0 && !loadingSamples ? (
               <p className="mt-2 text-sm text-gray-600">No sample projects are available from the backend.</p>
@@ -329,7 +340,8 @@ export default function App() {
             PatchPilot runs the predefined test suite against baseline and patched copies and compares the outcomes.
           </p>
           <p className="mt-1 text-xs text-gray-600">
-            Test command sent to the backend: <code>{DEFAULT_TEST_COMMAND}</code>
+            Test command: <code>{activeProject ? activeProject.test_command : DEFAULT_TEST_COMMAND}</code>
+            {activeProject ? <span className="ml-2">Build command: <code>{activeProject.build_command}</code></span> : null}
           </p>
           <button
             type="button"

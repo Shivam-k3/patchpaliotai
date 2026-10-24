@@ -33,4 +33,20 @@ describe("mapApiError", () => {
   it("includes the detail for unmapped errors", () => {
     expect(mapApiError(502, "GEMINI_API_KEY not configured", "fallback")).toContain("GEMINI_API_KEY not configured");
   });
+
+  it("explains Gemini quota failures without hiding the provider problem", () => {
+    expect(
+      mapApiError(
+        502,
+        "Gemini quota or rate limit exceeded. Check the configured API key/project quota and try again.",
+        "fallback",
+      ),
+    ).toMatch(/rate-limited or out of quota/i);
+  });
+
+  it("explains temporary Gemini service failures", () => {
+    expect(
+      mapApiError(502, "Gemini is temporarily unavailable. Wait a moment and retry, or select another configured Gemini model.", "fallback"),
+    ).toMatch(/temporarily unavailable/i);
+  });
 });

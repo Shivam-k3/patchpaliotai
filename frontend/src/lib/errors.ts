@@ -57,6 +57,15 @@ function friendlyForStatus(status: number, detail: string, fallback: string): st
     case 422:
       return `The request was invalid: ${clean}`;
     case 502:
+      if (clean.startsWith("Gemini is temporarily unavailable")) {
+        return "Gemini is temporarily unavailable. Wait a moment and retry, or configure another available Gemini model.";
+      }
+      if (clean.startsWith("Gemini quota or rate limit exceeded")) {
+        return "Gemini is temporarily rate-limited or out of quota. Check the backend API key/project quota, wait, or use another valid key.";
+      }
+      if (clean.startsWith("Gemini authentication or permission failed")) {
+        return "Gemini rejected the backend credentials. Check GEMINI_API_KEY and the Google project permissions.";
+      }
       return `The AI could not generate a patch: ${clean}`;
     case 500:
       return `The backend could not complete the request: ${clean}`;

@@ -1,0 +1,8 @@
+--- a/mathlib.py
++++ b/mathlib.py
+@@ -1,4 +1,4 @@
+ def divide(a, b):
+     if b == 0:
+-        return 0
++        raise ValueError("division by zero")
+     return a / b

@@ -15,6 +15,44 @@ class ExecutionError(Exception):
     pass
 
 
+def _patch_target_paths(patch_text: str) -> set[Path]:
+    paths: set[Path] = set()
+    for line in patch_text.splitlines():
+        if not (line.startswith("--- ") or line.startswith("+++ ")):
+            continue
+        raw_path = line[4:].split("\t", 1)[0].strip()
+        if raw_path == "/dev/null":
+            continue
+        if raw_path.startswith(("a/", "b/")):
+            raw_path = raw_path[2:]
+        path = Path(raw_path)
+        if path.is_absolute() or ".." in path.parts:
+            continue
+        paths.add(path)
+    return paths
+
+
+def _normalize_patch_targets(workdir: Path, patch_text: str) -> None:
+    for relative_path in _patch_target_paths(patch_text):
+        target = (workdir / relative_path).resolve()
+        try:
+            target.relative_to(workdir.resolve())
+        except ValueError:
+            continue
+        if not target.is_file():
+            continue
+        data = target.read_bytes()
+        if b"\x00" in data:
+            continue
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            continue
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        if normalized != text or data.startswith(b"\xef\xbb\xbf"):
+            target.write_text(normalized, encoding="utf-8", newline="\n")
+
+
 def _docker_available() -> bool:
     try:
         result = subprocess.run(["docker", "info"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=settings.docker_info_timeout_seconds)
@@ -28,15 +66,17 @@ def apply_patch(patch_text: str, workdir: Path) -> None:
     validate_patch(patch_text)
     patch_file = workdir / "_patch.diff"
     try:
-        patch_file.write_text(patch_text, encoding="utf-8")
+        _normalize_patch_targets(workdir, patch_text)
+        patch_file.write_bytes(patch_text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8"))
         try:
-            result = subprocess.run(["git", "apply", "--whitespace=nowarn", str(patch_file)], cwd=str(workdir), capture_output=True, text=True, timeout=settings.patch_apply_timeout_seconds)
+            result = subprocess.run(["git", "apply", "--no-index", "--whitespace=nowarn", str(patch_file)], cwd=str(workdir), capture_output=True, text=True, timeout=settings.patch_apply_timeout_seconds)
             if result.returncode == 0:
                 return
-            result2 = subprocess.run(["git", "apply", "-p1", "--whitespace=nowarn", str(patch_file)], cwd=str(workdir), capture_output=True, text=True, timeout=settings.patch_apply_timeout_seconds)
+            result2 = subprocess.run(["git", "apply", "--no-index", "-p1", "--whitespace=nowarn", str(patch_file)], cwd=str(workdir), capture_output=True, text=True, timeout=settings.patch_apply_timeout_seconds)
             if result2.returncode == 0:
                 return
-            raise ExecutionError("patch failed")
+            detail = (result2.stderr or result.stderr or "git apply failed").strip()
+            raise ExecutionError(f"patch failed: {detail[-1000:]}")
         except ExecutionError:
             raise
         except Exception:
@@ -71,8 +111,12 @@ def _run_tests_local(workdir: Path, test_command: str) -> TestRun:
         logger.debug("Local execution failed")
         return TestRun(tests=[], runner_error=True)
     
+    return TestRun(tests=_parse_test_output(result.stdout), exit_code=result.returncode)
+
+
+def _parse_test_output(output: str) -> list[TestOutcome]:
     tests = []
-    for line in result.stdout.splitlines():
+    for line in output.splitlines():
         if "::" in line and ("PASSED" in line or "FAILED" in line or "ERROR" in line or "SKIPPED" in line):
             test_id = None
             for p in line.split():
@@ -91,7 +135,7 @@ def _run_tests_local(workdir: Path, test_command: str) -> TestRun:
                 status = "SKIPPED"
             tests.append(TestOutcome(test_id=test_id, status=status))
     
-    return TestRun(tests=tests, exit_code=result.returncode)
+    return tests
 
 
 def run_tests(workdir: Path, test_command: str = "python -m pytest -v") -> TestRun:
@@ -123,47 +167,4 @@ def run_tests(workdir: Path, test_command: str = "python -m pytest -v") -> TestR
     else:
         return _run_tests_local(workdir, test_command)
     
-    tests = []
-    for line in result.stdout.splitlines():
-        if "::" in line and ("PASSED" in line or "FAILED" in line or "ERROR" in line or "SKIPPED" in line):
-            test_id = None
-            for p in line.split():
-                if "::" in p and p.strip():
-                    test_id = p.strip().rstrip(',')
-                    break
-            if not test_id:
-                continue
-            status = "PASSED"
-            l = line.upper()
-            if "FAILED" in l:
-                status = "FAILED"
-            elif "ERROR" in l and "PASSED" not in l:
-                status = "ERROR"
-            elif "SKIPPED" in l:
-                status = "SKIPPED"
-            tests.append(TestOutcome(test_id=test_id, status=status))
-    
-    return TestRun(tests=tests, exit_code=result.returncode)
-
-    
-    tests = []
-    for line in result.stdout.splitlines():
-        if "::" in line and ("PASSED" in line or "FAILED" in line or "ERROR" in line or "SKIPPED" in line):
-            test_id = None
-            for p in line.split():
-                if "::" in p and p.strip():
-                    test_id = p.strip().rstrip(',')
-                    break
-            if not test_id:
-                continue
-            status = "PASSED"
-            l = line.upper()
-            if "FAILED" in l:
-                status = "FAILED"
-            elif "ERROR" in l and "PASSED" not in l:
-                status = "ERROR"
-            elif "SKIPPED" in l:
-                status = "SKIPPED"
-            tests.append(TestOutcome(test_id=test_id, status=status))
-    
-    return TestRun(tests=tests, exit_code=result.returncode)
+    return TestRun(tests=_parse_test_output(result.stdout), exit_code=result.returncode)

@@ -84,6 +84,7 @@ def test_analyze_maps_gemini_error_to_502():
     with patch("app.api.generate_patch", side_effect=GeminiError("GEMINI_API_KEY not configured")):
         resp = client.post("/api/analyze", json={"bug_report": "x"})
     assert resp.status_code == 502
+    assert resp.json()["detail"] == "GEMINI_API_KEY not configured"
 
 
 def test_analyze_sends_registered_sample_files_to_gemini():

@@ -34,18 +34,38 @@ export function normalizeTestRun(value: unknown): TestRun {
     exit_code: typeof record.exit_code === "number" ? record.exit_code : null,
     timed_out: Boolean(record.timed_out),
     runner_error: Boolean(record.runner_error),
+    passed_count: typeof record.passed_count === "number" ? record.passed_count : undefined,
+    failed_count: typeof record.failed_count === "number" ? record.failed_count : undefined,
+    error_count: typeof record.error_count === "number" ? record.error_count : undefined,
+    skipped_count: typeof record.skipped_count === "number" ? record.skipped_count : undefined,
+    total_count: typeof record.total_count === "number" ? record.total_count : undefined,
     logs: (typeof logs === "string" || Array.isArray(logs)) ? (logs as TestRun["logs"]) : undefined,
+  };
+}
+
+function normalizeBuild(value: unknown) {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return {
+    exit_code: typeof record.exit_code === "number" ? record.exit_code : null,
+    timed_out: Boolean(record.timed_out),
+    runner_error: Boolean(record.runner_error),
+    logs: (typeof record.logs === "string" || Array.isArray(record.logs)) ? (record.logs as TestRun["logs"]) : undefined,
   };
 }
 
 export function normalizeVerificationResult(value: unknown): VerificationResult {
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  const classification = VALID_CLASSIFICATIONS.has(record.classification as Classification)
+  let classification = VALID_CLASSIFICATIONS.has(record.classification as Classification)
     ? (record.classification as Classification)
     : "INCONCLUSIVE";
 
   const baseline = normalizeTestRun(record.baseline);
   const patched = normalizeTestRun(record.patched);
+  if (classification === "IMPROVED" && (!baseline.tests.length || !patched.tests.length)) {
+    classification = "INCONCLUSIVE";
+  }
+  baseline.build = normalizeBuild((record.baseline as Record<string, unknown> | undefined)?.build);
+  patched.build = normalizeBuild((record.patched as Record<string, unknown> | undefined)?.build);
 
   const error = typeof record.error === "string" && record.error.trim().length > 0 ? record.error : null;
   const topLevelLogs = record.logs;

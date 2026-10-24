@@ -12,7 +12,10 @@ def validate_patch(patch_text: str) -> bool:
     if '\x00' in patch_text:
         raise PatchValidationError("invalid patch")
     # Reject absolute paths
-    if re.search(r'([A-Za-z]:[\\/]|^/)', patch_text):
+    if re.search(r'([A-Za-z]:[\\/]|^/)', patch_text) or re.search(
+        r'(?m)^(?:---|\+\+\+) (?:[ab]/)?(?:/|[A-Za-z]:[\\/])',
+        patch_text,
+    ):
         raise PatchValidationError("absolute paths not allowed")
     # Reject path traversal
     if '..' in patch_text:
@@ -26,4 +29,3 @@ def validate_patch(patch_text: str) -> bool:
     if not re.search(r'^(diff --git|--- )', patch_text, re.M):
         raise PatchValidationError("not a unified diff")
     return True
-

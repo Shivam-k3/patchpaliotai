@@ -3,7 +3,7 @@ import { extractErrorMessage, mapApiError } from "./lib/errors";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || "http://localhost:8000";
 const DEFAULT_TIMEOUT_MS = 30000;
-const ANALYZE_TIMEOUT_MS = 90000;
+const ANALYZE_TIMEOUT_MS = 180000;
 export const DEFAULT_TEST_COMMAND = "python -m pytest -v";
 const VERIFICATION_TIMEOUT_MS = 600000;
 
@@ -21,6 +21,14 @@ export interface ReadyResponse {
     [key: string]: unknown;
   };
   [key: string]: unknown;
+}
+
+export interface ProjectInfo {
+  id: string;
+  label: string;
+  runtime: string;
+  test_command: string;
+  build_command: string;
 }
 
 async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<Response> {
@@ -41,8 +49,19 @@ async function parseErrorResponse(res: Response, fallback: string): Promise<stri
   } catch {
     payload = null;
   }
+
   const detail = extractErrorMessage(payload, fallback);
   return mapApiError(res.status, detail, fallback);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function isAnalyzeResponse(value: unknown): value is AnalyzeResponse {
+  if (!value || typeof value !== "object") return false;
+  const diff = (value as { proposed_unified_diff?: unknown }).proposed_unified_diff;
+  return typeof diff === "string" && diff.trim().length > 0;
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {
@@ -71,28 +90,44 @@ export async function fetchSamples(): Promise<string[]> {
   return list.filter((s): s is string => typeof s === "string");
 }
 
-export async function analyzeBug(bugReport: string, sampleName: string | undefined): Promise<AnalyzeResponse> {
-  const res = await fetchWithTimeout(`${API_BASE}/api/analyze`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ bug_report: bugReport, sample_name: sampleName || undefined }),
-  }, ANALYZE_TIMEOUT_MS);
+export async function fetchProjects(): Promise<ProjectInfo[]> {
+  const res = await fetchWithTimeout(`${API_BASE}/api/projects`);
   if (!res.ok) {
-    throw new Error(await parseErrorResponse(res, "The analysis request failed."));
+    throw new Error(await parseErrorResponse(res, "Could not load the registered projects."));
   }
-  const data = (await res.json()) as AnalyzeResponse;
-  if (!data.proposed_unified_diff || (typeof data.proposed_unified_diff === "string" && !data.proposed_unified_diff.trim())) {
-    throw new Error("The AI response did not include a proposed patch. You can paste a unified diff manually and run verification.");
-  }
-  return data;
+  const data = (await res.json()) as { projects?: unknown };
+  return Array.isArray(data.projects) ? data.projects.filter((p): p is ProjectInfo => typeof p === "object" && p !== null && typeof (p as ProjectInfo).id === "string") : [];
 }
 
-export async function verifyPatch(sampleName: string, patchText: string, testCommand?: string): Promise<VerificationResult> {
+export async function analyzeBug(bugReport: string, sampleName?: string, projectId?: string): Promise<AnalyzeResponse> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bug_report: bugReport, sample_name: sampleName || undefined, project_id: projectId || undefined }),
+    }, ANALYZE_TIMEOUT_MS);
+    if (!res.ok) {
+      throw new Error(await parseErrorResponse(res, "The analysis request failed."));
+    }
+    const data: unknown = await res.json();
+    if (!isAnalyzeResponse(data)) {
+      throw new Error("The AI response did not include a valid proposed patch. Review the provider response and try again.");
+    }
+    return data;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error("Analysis timed out before the backend responded. No patch was accepted; please retry.");
+    }
+    throw error;
+  }
+}
+
+export async function verifyPatch(sampleName: string, patchText: string, testCommand?: string, projectId?: string): Promise<VerificationResult> {
   try {
     const res = await fetchWithTimeout(`${API_BASE}/api/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sample_name: sampleName, patch_text: patchText, test_command: testCommand || DEFAULT_TEST_COMMAND }),
+      body: JSON.stringify({ sample_name: projectId ? undefined : sampleName, project_id: projectId || undefined, patch_text: patchText, test_command: testCommand || DEFAULT_TEST_COMMAND }),
     }, VERIFICATION_TIMEOUT_MS);
     if (!res.ok) {
       throw new Error(await parseErrorResponse(res, "The verification request failed."));
@@ -100,7 +135,7 @@ export async function verifyPatch(sampleName: string, patchText: string, testCom
     const data = (await res.json()) as VerificationResult;
     return data;
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (isAbortError(error)) {
       throw new Error("Verification timed out before the backend responded. No success was claimed; please retry.");
     }
     throw error;

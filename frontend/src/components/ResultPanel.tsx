@@ -31,11 +31,14 @@ function ClassificationBadge({ classification }: { classification: VerificationR
 
 function RunSummary({ run, title }: { run: TestRun; title: string }) {
   const normalizedRun = normalizeTestRun(run);
-  const counts: Record<string, number> = { PASSED: 0, FAILED: 0, ERROR: 0, TIMEOUT: 0, SKIPPED: 0 };
-  for (const t of normalizedRun.tests ?? []) {
-    counts[t.status] = (counts[t.status] ?? 0) + 1;
-  }
   const hasExecutionProblem = Boolean(normalizedRun.timed_out || normalizedRun.runner_error);
+  const counts = {
+    PASSED: normalizedRun.passed_count ?? 0,
+    FAILED: normalizedRun.failed_count ?? 0,
+    ERROR: normalizedRun.error_count ?? 0,
+    SKIPPED: normalizedRun.skipped_count ?? 0,
+  };
+  const hasEvidence = (normalizedRun.total_count ?? normalizedRun.tests?.length ?? 0) > 0;
 
   return (
     <div className="rounded border border-gray-200 p-3">
@@ -43,8 +46,8 @@ function RunSummary({ run, title }: { run: TestRun; title: string }) {
         <h3 className="font-semibold">{title}</h3>
         <div className="flex flex-wrap gap-2 text-xs">
           <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-700">exit code: {normalizedRun.exit_code ?? "n/a"}</span>
-          <span className={`rounded px-2 py-0.5 border ${TONE_CLASSES[hasExecutionProblem ? "amber" : "gray"]}`}>
-            {hasExecutionProblem ? "execution problem" : "completed"}
+          <span className={`rounded px-2 py-0.5 border ${TONE_CLASSES[hasExecutionProblem || !hasEvidence ? "amber" : "gray"]}`}>
+            {hasExecutionProblem ? "execution problem" : !hasEvidence ? "no test evidence" : "completed"}
           </span>
         </div>
       </div>
@@ -55,7 +58,7 @@ function RunSummary({ run, title }: { run: TestRun; title: string }) {
         <span className="text-red-700">{counts.TIMEOUT} timed out</span>
         <span className="text-gray-600">{counts.SKIPPED} skipped</span>
       </div>
-      {(normalizedRun.tests?.length ?? 0) === 0 ? (
+      {!hasEvidence ? (
         <p className="mt-2 text-sm text-gray-500">No test results were captured for this run.</p>
       ) : (
         <ul className="mt-2 space-y-1">
@@ -71,12 +74,30 @@ function RunSummary({ run, title }: { run: TestRun; title: string }) {
   );
 }
 
+function BuildSummary({ build, title }: { build?: TestRun["build"]; title: string }) {
+  if (!build) return null;
+  const problem = Boolean(build.timed_out || build.runner_error || build.exit_code !== 0);
+  return (
+    <div className="rounded border border-gray-200 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-semibold">{title} build</h3>
+        <span className={`rounded px-2 py-0.5 border ${TONE_CLASSES[problem ? "amber" : "gray"]}`}>
+          {problem ? "failed" : "passed"}
+        </span>
+      </div>
+      <p className="mt-2 text-sm text-gray-700">exit code: {build.exit_code ?? "n/a"}</p>
+      {build.logs ? <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-xs">{toText(build.logs)}</pre> : null}
+    </div>
+  );
+}
+
 export default function ResultPanel({ result }: { result: VerificationResult }) {
   const normalized = normalizeVerificationResult(result);
   const classification = getClassificationMeta(normalized.classification);
   const executionLogs = collectExecutionLogs(normalized);
   const executionProblem =
-    normalized.baseline.timed_out || normalized.baseline.runner_error || normalized.patched.timed_out || normalized.patched.runner_error;
+    normalized.baseline.timed_out || normalized.baseline.runner_error || normalized.patched.timed_out || normalized.patched.runner_error ||
+    !normalized.baseline.tests?.length || !normalized.patched.tests?.length;
   const inconclusive =
     normalized.classification === "INCONCLUSIVE" || executionProblem || Boolean(normalized.error);
 
@@ -120,6 +141,8 @@ export default function ResultPanel({ result }: { result: VerificationResult }) 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <RunSummary run={normalized.baseline} title="Baseline run" />
         <RunSummary run={normalized.patched} title="Patched run" />
+        <BuildSummary build={normalized.baseline.build} title="Baseline" />
+        <BuildSummary build={normalized.patched.build} title="Patched" />
       </div>
 
       {resolved.length > 0 || newlyFailing.length > 0 ? (

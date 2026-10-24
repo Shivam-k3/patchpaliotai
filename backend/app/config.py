@@ -26,7 +26,7 @@ class Settings:
         
         # Gemini
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        self.model_name = os.getenv("MODEL_NAME") or "gemini-flash-latest"
+        self.gemini_model = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
         self.gemini_timeout_seconds = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "60"))
         
         # Execution
@@ -58,7 +58,7 @@ if PERSISTENT_SETTINGS:
         
         cors_origins: str = Field(default="http://localhost:5173,http://localhost:3000")
         gemini_api_key: str | None = Field(default=None)
-        model_name: str = Field(default="gemini-flash-latest")
+        gemini_model: str = Field(default="gemini-3.8-flash")
         gemini_timeout_seconds: int = Field(default=60, ge=1, le=300)
         
         execution_mode: str = Field(default="local")
@@ -85,7 +85,7 @@ if PERSISTENT_SETTINGS:
     settings.log_level = _sm.log_level.upper()
     settings.cors_origins = [o.strip() for o in _sm.cors_origins.split(",") if o.strip()]
     settings.gemini_api_key = _sm.gemini_api_key
-    settings.model_name = _sm.model_name
+    settings.gemini_model = _sm.gemini_model
     settings.gemini_timeout_seconds = _sm.gemini_timeout_seconds
     settings.execution_mode = getattr(_sm, "execution_mode", "local").lower()
     settings.docker_timeout_seconds = _sm.docker_timeout_seconds

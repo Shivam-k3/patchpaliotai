@@ -10,6 +10,19 @@ export interface TestRun {
   exit_code?: number | null;
   timed_out?: boolean;
   runner_error?: boolean;
+  passed_count?: number;
+  failed_count?: number;
+  error_count?: number;
+  skipped_count?: number;
+  total_count?: number;
+  logs?: TextBlock;
+  build?: BuildResult;
+}
+
+export interface BuildResult {
+  exit_code?: number | null;
+  timed_out?: boolean;
+  runner_error?: boolean;
   logs?: TextBlock;
 }
 
